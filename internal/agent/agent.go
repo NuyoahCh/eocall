@@ -2,11 +2,17 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"io"
+	"strings"
+
+	"github.com/cloudwego/eino/schema"
 
 	"github.com/NuyoahCh/eocall/internal/agent/executor"
 	"github.com/NuyoahCh/eocall/internal/agent/planner"
 	"github.com/NuyoahCh/eocall/internal/chat/memory"
 	"github.com/NuyoahCh/eocall/internal/chat/session"
+	"github.com/NuyoahCh/eocall/internal/llm/eino"
 	"github.com/NuyoahCh/eocall/internal/rag"
 	"github.com/NuyoahCh/eocall/internal/tools/registry"
 )
@@ -19,6 +25,7 @@ type Agent struct {
 	ragService   *rag.Service
 	memory       *memory.SlidingWindowMemory
 	sessionMgr   *session.Manager
+	llmClient    *eino.Client
 }
 
 // Config Agent 配置
@@ -29,12 +36,13 @@ type Config struct {
 
 // NewAgent 创建 Agent
 func NewAgent(
-	p *planner.Planner,
+	llmClient *eino.Client,
 	toolRegistry *registry.Registry,
 	ragService *rag.Service,
 	sessionMgr *session.Manager,
 	cfg *Config,
 ) *Agent {
+	p := planner.NewPlanner(llmClient)
 	exec := executor.NewExecutor(toolRegistry, p)
 
 	return &Agent{
@@ -43,6 +51,7 @@ func NewAgent(
 		toolRegistry: toolRegistry,
 		ragService:   ragService,
 		sessionMgr:   sessionMgr,
+		llmClient:    llmClient,
 		memory:       memory.NewSlidingWindowMemory(cfg.MaxHistory, cfg.SummaryAfter, nil),
 	}
 }
@@ -84,35 +93,25 @@ func (a *Agent) Chat(ctx context.Context, req *Request) (*Response, error) {
 		}
 	}
 
-	// 4. 构建完整上下文
-	fullContext := buildFullContext(summary, recentMsgs, ragContext)
+	// 4. 构建消息列表
+	messages := a.buildMessages(summary, recentMsgs, ragContext, req.Message)
 
-	// 5. 创建执行计划
-	toolNames := getToolNames(a.toolRegistry.List())
-	plan, err := a.planner.CreatePlan(ctx, req.Message, toolNames, fullContext)
+	// 5. 调用 LLM
+	resp, err := a.llmClient.GenerateWithMessages(ctx, messages)
 	if err != nil {
 		return nil, err
 	}
 
-	// 6. 执行计划
-	if err := a.executor.ExecutePlan(ctx, plan); err != nil {
-		return nil, err
-	}
-
-	// 7. 生成响应
-	response := a.generateResponse(plan)
-	sess.AddMessage("assistant", response)
+	sess.AddMessage("assistant", resp.Content)
 
 	return &Response{
-		Message: response,
-		Plan:    plan,
+		Message: resp.Content,
 		Sources: sources,
 	}, nil
 }
 
 // ChatStream 流式对话
 func (a *Agent) ChatStream(ctx context.Context, req *Request, callback func(chunk string)) error {
-	// 类似 Chat，但使用流式输出
 	sess := a.sessionMgr.GetOrCreate(ctx, req.UserID, req.SessionID)
 	sess.AddMessage("user", req.Message)
 
@@ -126,69 +125,70 @@ func (a *Agent) ChatStream(ctx context.Context, req *Request, callback func(chun
 		}
 	}
 
-	fullContext := buildFullContext(summary, recentMsgs, ragContext)
-	toolNames := getToolNames(a.toolRegistry.List())
+	messages := a.buildMessages(summary, recentMsgs, ragContext, req.Message)
 
-	plan, err := a.planner.CreatePlan(ctx, req.Message, toolNames, fullContext)
+	// 流式调用
+	stream, err := a.llmClient.GetChatModel().Stream(ctx, messages)
 	if err != nil {
 		return err
 	}
+	defer stream.Close()
 
-	// 流式执行
-	var fullResponse string
-	err = a.executor.ExecuteStepByStep(ctx, plan, func(step *planner.Step, result string) {
-		chunk := formatStepResult(step, result)
-		fullResponse += chunk
-		callback(chunk)
-	})
-
-	if err != nil {
-		return err
+	var fullResponse strings.Builder
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		fullResponse.WriteString(chunk.Content)
+		callback(chunk.Content)
 	}
 
-	sess.AddMessage("assistant", fullResponse)
+	sess.AddMessage("assistant", fullResponse.String())
 	return nil
 }
 
-func buildFullContext(summary string, msgs []session.Message, ragContext string) string {
-	ctx := ""
+func (a *Agent) buildMessages(summary string, recentMsgs []session.Message, ragContext, userMessage string) []*schema.Message {
+	messages := make([]*schema.Message, 0)
+
+	// 系统提示
+	systemContent := `你是一个专业的运维 AI 助手，负责帮助用户分析告警、排查故障、解答运维问题。
+请根据上下文信息和用户问题，给出专业、准确的回答。`
+
 	if summary != "" {
-		ctx += "## 历史摘要\n" + summary + "\n\n"
-	}
-	if len(msgs) > 0 {
-		ctx += "## 最近对话\n" + memory.FormatMessages(msgs) + "\n\n"
+		systemContent += "\n\n## 历史摘要\n" + summary
 	}
 	if ragContext != "" {
-		ctx += "## 相关知识\n" + ragContext + "\n\n"
+		systemContent += "\n\n## 相关知识\n" + ragContext
 	}
-	return ctx
-}
 
-func getToolNames(defs []registry.ToolDefinition) []string {
-	names := make([]string, len(defs))
-	for i, d := range defs {
-		names[i] = d.Name + ": " + d.Description
-	}
-	return names
-}
+	messages = append(messages, &schema.Message{
+		Role:    schema.System,
+		Content: systemContent,
+	})
 
-func (a *Agent) generateResponse(plan *planner.Plan) string {
-	// 根据执行结果生成响应
-	response := ""
-	for _, step := range plan.Steps {
-		if step.Result != "" {
-			response += step.Result + "\n"
+	// 历史消息
+	for _, msg := range recentMsgs {
+		role := schema.User
+		if msg.Role == "assistant" {
+			role = schema.Assistant
 		}
+		messages = append(messages, &schema.Message{
+			Role:    role,
+			Content: msg.Content,
+		})
 	}
-	if response == "" {
-		response = "任务已完成"
-	}
-	return response
-}
 
-func formatStepResult(step *planner.Step, result string) string {
-	if step.Status == "failed" {
-		return "❌ " + step.Description + ": " + step.Error + "\n"
+	// 当前用户消息 (如果不在历史中)
+	if len(recentMsgs) == 0 || recentMsgs[len(recentMsgs)-1].Content != userMessage {
+		messages = append(messages, &schema.Message{
+			Role:    schema.User,
+			Content: userMessage,
+		})
 	}
-	return "✅ " + step.Description + "\n" + result + "\n"
+
+	return messages
 }

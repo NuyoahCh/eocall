@@ -24,12 +24,16 @@ type ServerConfig struct {
 
 // LLMConfig 大模型配置
 type LLMConfig struct {
-	Provider    string  `yaml:"provider"`
-	Model       string  `yaml:"model"`
-	APIKey      string  `yaml:"api_key"`
-	BaseURL     string  `yaml:"base_url"`
-	MaxTokens   int     `yaml:"max_tokens"`
-	Temperature float64 `yaml:"temperature"`
+	ThinkChat    ModelConfig `yaml:"ds_think_chat_model"`
+	QuickChat    ModelConfig `yaml:"ds_quick_chat_model"`
+	Embedding    ModelConfig `yaml:"doubao_embedding_model"`
+}
+
+// ModelConfig 单个模型配置
+type ModelConfig struct {
+	APIKey  string  `yaml:"api_key"`
+	BaseURL string  `yaml:"base_url"`
+	Model   string  `yaml:"model"`
 }
 
 // RAGConfig RAG 检索配置
@@ -42,7 +46,7 @@ type RAGConfig struct {
 
 // VectorDBConfig 向量数据库配置
 type VectorDBConfig struct {
-	Type     string `yaml:"type"` // milvus, qdrant, etc.
+	Type     string `yaml:"type"`
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	Database string `yaml:"database"`
@@ -50,10 +54,10 @@ type VectorDBConfig struct {
 
 // SessionConfig 会话配置
 type SessionConfig struct {
-	MaxHistory      int           `yaml:"max_history"`      // 最大历史轮数
-	SummaryAfter    int           `yaml:"summary_after"`    // 多少轮后开始摘要
-	TTL             time.Duration `yaml:"ttl"`              // 会话过期时间
-	CleanupInterval time.Duration `yaml:"cleanup_interval"` // 清理间隔
+	MaxHistory      int           `yaml:"max_history"`
+	SummaryAfter    int           `yaml:"summary_after"`
+	TTL             time.Duration `yaml:"ttl"`
+	CleanupInterval time.Duration `yaml:"cleanup_interval"`
 }
 
 // LogConfig 日志配置

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -13,7 +14,6 @@ import (
 	"github.com/NuyoahCh/eocall/api/handler"
 	"github.com/NuyoahCh/eocall/api/middleware"
 	"github.com/NuyoahCh/eocall/internal/agent"
-	"github.com/NuyoahCh/eocall/internal/agent/planner"
 	"github.com/NuyoahCh/eocall/internal/chat/session"
 	"github.com/NuyoahCh/eocall/internal/llm/eino"
 	"github.com/NuyoahCh/eocall/internal/tools/registry"
@@ -35,28 +35,25 @@ func main() {
 	logger.Init(cfg.Log.Level, cfg.Log.Format)
 	logger.Info("starting eocall server", "host", cfg.Server.Host, "port", cfg.Server.Port)
 
-	// 初始化组件
-	sessionMgr := session.NewManager(cfg.Session.TTL)
-	toolRegistry := registry.NewRegistry()
+	ctx := context.Background()
 
-	// 初始化 LLM 客户端
-	llmClient, err := eino.NewClient(&eino.Config{
-		Provider:    cfg.LLM.Provider,
-		Model:       cfg.LLM.Model,
-		APIKey:      cfg.LLM.APIKey,
-		BaseURL:     cfg.LLM.BaseURL,
-		MaxTokens:   cfg.LLM.MaxTokens,
-		Temperature: cfg.LLM.Temperature,
+	// 初始化 LLM 客户端 (使用 QuickChat 模型)
+	llmClient, err := eino.NewClient(ctx, &eino.Config{
+		APIKey:  cfg.LLM.QuickChat.APIKey,
+		BaseURL: cfg.LLM.QuickChat.BaseURL,
+		Model:   cfg.LLM.QuickChat.Model,
 	})
 	if err != nil {
 		log.Fatalf("failed to create llm client: %v", err)
 	}
+	logger.Info("llm client initialized", "model", cfg.LLM.QuickChat.Model)
 
-	// 初始化 Planner
-	p := planner.NewPlanner(llmClient)
+	// 初始化组件
+	sessionMgr := session.NewManager(cfg.Session.TTL)
+	toolRegistry := registry.NewRegistry()
 
 	// 初始化 Agent
-	agentInstance := agent.NewAgent(p, toolRegistry, nil, sessionMgr, &agent.Config{
+	agentInstance := agent.NewAgent(llmClient, toolRegistry, nil, sessionMgr, &agent.Config{
 		MaxHistory:   cfg.Session.MaxHistory,
 		SummaryAfter: cfg.Session.SummaryAfter,
 	})
@@ -82,7 +79,7 @@ func main() {
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      h,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		WriteTimeout: 120 * time.Second,
 	}
 
 	// 优雅关闭

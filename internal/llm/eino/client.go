@@ -2,62 +2,116 @@ package eino
 
 import (
 	"context"
+	"errors"
+	"io"
 
-	"github.com/NuyoahCh/eocall/internal/llm"
+	"github.com/cloudwego/eino-ext/components/model/ark"
+	"github.com/cloudwego/eino/schema"
 )
 
-// Config Eino 配置
-type Config = llm.Config
+// Config Eino 客户端配置
+type Config struct {
+	APIKey  string
+	BaseURL string
+	Model   string
+}
 
 // Client Eino LLM 客户端
-// 基于 ByteDance Eino 框架实现
 type Client struct {
-	config *llm.Config
-	// TODO: 添加 Eino 相关字段
+	chatModel *ark.ChatModel
+	config    *Config
 }
 
 // NewClient 创建 Eino 客户端
-func NewClient(cfg *Config) (*Client, error) {
-	return &Client{
-		config: cfg,
-	}, nil
-}
-
-// Chat 聊天
-func (c *Client) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// TODO: 实现 Eino 调用
-	// 参考: https://github.com/cloudwego/eino
-	return &llm.ChatResponse{
-		Content: "Eino client not implemented yet",
-	}, nil
-}
-
-// ChatStream 流式聊天
-func (c *Client) ChatStream(ctx context.Context, req *llm.ChatRequest, callback func(chunk string)) error {
-	// TODO: 实现 Eino 流式调用
-	callback("Eino streaming not implemented yet")
-	return nil
-}
-
-// Generate 简单生成 (实现 planner.LLMClient 接口)
-func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
-	resp, err := c.Chat(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
-			{Role: "user", Content: prompt},
-		},
+func NewClient(ctx context.Context, cfg *Config) (*Client, error) {
+	chatModel, err := ark.NewChatModel(ctx, &ark.ChatModelConfig{
+		APIKey:  cfg.APIKey,
+		BaseURL: cfg.BaseURL,
+		Model:   cfg.Model,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		chatModel: chatModel,
+		config:    cfg,
+	}, nil
+}
+
+// Generate 生成回复
+func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
+	msgs := []*schema.Message{
+		{Role: schema.User, Content: prompt},
+	}
+
+	resp, err := c.chatModel.Generate(ctx, msgs)
 	if err != nil {
 		return "", err
 	}
+
 	return resp.Content, nil
 }
 
-// GenerateStream 流式生成 (实现 planner.LLMClient 接口)
+// GenerateWithMessages 使用消息列表生成回复
+func (c *Client) GenerateWithMessages(ctx context.Context, messages []*schema.Message) (*schema.Message, error) {
+	return c.chatModel.Generate(ctx, messages)
+}
+
+// GenerateStream 流式生成
 func (c *Client) GenerateStream(ctx context.Context, prompt string, callback func(chunk string)) error {
-	return c.ChatStream(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
-			{Role: "user", Content: prompt},
-		},
-		Stream: true,
-	}, callback)
+	msgs := []*schema.Message{
+		{Role: schema.User, Content: prompt},
+	}
+
+	stream, err := c.chatModel.Stream(ctx, msgs)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		callback(chunk.Content)
+	}
+
+	return nil
+}
+
+// StreamWithMessages 使用消息列表流式生成
+func (c *Client) StreamWithMessages(ctx context.Context, messages []*schema.Message, callback func(chunk *schema.Message)) error {
+	stream, err := c.chatModel.Stream(ctx, messages)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		callback(chunk)
+	}
+
+	return nil
+}
+
+// BindTools 绑定工具
+func (c *Client) BindTools(tools []*schema.ToolInfo) error {
+	return c.chatModel.BindTools(tools)
+}
+
+// GetChatModel 获取底层 ChatModel
+func (c *Client) GetChatModel() *ark.ChatModel {
+	return c.chatModel
 }
