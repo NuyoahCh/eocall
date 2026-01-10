@@ -67,6 +67,9 @@ func main() {
 	mux.HandleFunc("/api/v1/chat", chatHandler.Handle)
 	mux.HandleFunc("/api/v1/chat/stream", chatHandler.HandleStream)
 
+	// 静态文件服务
+	mux.Handle("/", http.FileServer(http.Dir("static")))
+
 	// 应用中间件
 	h := middleware.Chain(mux,
 		middleware.Recovery,
