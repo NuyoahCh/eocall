@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NuyoahCh/eocall/api/handler"
+	"github.com/NuyoahCh/eocall/api/middleware"
 	"github.com/NuyoahCh/eocall/internal/agent"
 	"github.com/NuyoahCh/eocall/internal/agent/planner"
 	"github.com/NuyoahCh/eocall/internal/chat/session"
@@ -59,16 +61,26 @@ func main() {
 		SummaryAfter: cfg.Session.SummaryAfter,
 	})
 
+	// 创建处理器
+	chatHandler := handler.NewChatHandler(agentInstance)
+
 	// 设置 HTTP 路由
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/api/v1/chat", chatHandler(agentInstance))
-	mux.HandleFunc("/api/v1/chat/stream", streamChatHandler(agentInstance))
+	mux.HandleFunc("/api/v1/chat", chatHandler.Handle)
+	mux.HandleFunc("/api/v1/chat/stream", chatHandler.HandleStream)
+
+	// 应用中间件
+	h := middleware.Chain(mux,
+		middleware.Recovery,
+		middleware.Logger,
+		middleware.CORS,
+	)
 
 	// 启动服务器
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:      mux,
+		Handler:      h,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
@@ -89,24 +101,7 @@ func main() {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
-}
-
-func chatHandler(a *agent.Agent) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: 实现聊天 API
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message":"chat endpoint"}`))
-	}
-}
-
-func streamChatHandler(a *agent.Agent) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: 实现流式聊天 API (SSE)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Write([]byte("data: {\"message\":\"stream endpoint\"}\n\n"))
-	}
 }
