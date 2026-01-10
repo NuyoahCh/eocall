@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -130,7 +131,7 @@ func (a *Agent) ChatStream(ctx context.Context, req *Request, callback func(chun
 	// 流式调用
 	stream, err := a.llmClient.GetChatModel().Stream(ctx, messages)
 	if err != nil {
-		return err
+		return fmt.Errorf("stream error: %w", err)
 	}
 	defer stream.Close()
 
@@ -141,7 +142,7 @@ func (a *Agent) ChatStream(ctx context.Context, req *Request, callback func(chun
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("recv error: %w", err)
 		}
 		fullResponse.WriteString(chunk.Content)
 		callback(chunk.Content)

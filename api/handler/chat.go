@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/NuyoahCh/eocall/internal/agent"
+	"github.com/NuyoahCh/eocall/pkg/logger"
 )
 
 // ChatHandler 聊天处理器
@@ -80,6 +81,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 
 	var req ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Error("decode request failed", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -101,9 +103,12 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		logger.Error("streaming not supported")
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
+
+	logger.Info("starting chat stream", "user_id", req.UserID, "message", req.Message)
 
 	// 流式回调
 	callback := func(chunk string) {
@@ -120,6 +125,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	}, callback)
 
 	if err != nil {
+		logger.Error("chat stream failed", "error", err)
 		fmt.Fprintf(w, "data: {\"error\":\"%s\"}\n\n", err.Error())
 		flusher.Flush()
 		return
