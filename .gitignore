@@ -44,3 +44,12 @@ temp/
 
 # other
 /internal/ai/cmd/knowledge_cmd/config/
+/manifest/config/
+/manifest/docker/volumes/etcd/member/
+/manifest/docker/volumes/etcd/member/snap/
+/manifest/docker/volumes/etcd/member/wal/
+/manifest/docker/volumes/milvus/data/
+/manifest/docker/volumes/milvus/rdb_data/
+/manifest/docker/volumes/milvus/rdb_data_meta_kv/
+/manifest/docker/volumes/minio/.minio.sys/
+/manifest/docker/volumes/minio/a-bucket/
