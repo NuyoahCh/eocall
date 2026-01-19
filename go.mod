@@ -4,7 +4,6 @@ go 1.24.4
 
 require (
 	github.com/cloudwego/eino v0.6.0
-	github.com/cloudwego/eino-examples v0.0.0-20250929123132-bbbae0931948
 	github.com/cloudwego/eino-ext/components/embedding/dashscope v0.0.0-20260109062358-b9080dbc7bed
 	github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75b93b87b8a9
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.1
@@ -19,10 +18,12 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 )
@@ -39,7 +40,6 @@ require (
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20251022075257-f53d64495d2f
-	github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20251022075257-f53d64495d2f
 	github.com/cloudwego/eino-ext/components/tool/duckduckgo/v2 v2.0.0-20250826125654-37d4a5029810
 	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.2 // indirect
 	github.com/cockroachdb/errors v1.9.1 // indirect
@@ -56,7 +56,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/google/uuid v1.6.0
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/grokify/html-strip-tags-go v0.1.0 // indirect
