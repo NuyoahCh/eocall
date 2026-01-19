@@ -41,3 +41,6 @@ temp/
 
 # env
 .env
+
+# other
+/internal/ai/cmd/knowledge_cmd/config/
