@@ -1,8 +1,6 @@
 module github.com/NuyoahCh/eocall
 
-go 1.24.7
-
-toolchain go1.24.12
+go 1.24.12
 
 require (
 	github.com/cloudwego/eino v0.7.14
